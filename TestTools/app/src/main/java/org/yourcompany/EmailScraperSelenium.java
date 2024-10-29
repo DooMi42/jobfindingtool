@@ -26,7 +26,7 @@ public class EmailScraperSelenium {
         String mainUrl = "https://www.kauppalehti.fi/yritykset/toimialat/ohjelmistojen-suunnittelu-ja-valmistus/62010?page=";
         Set<String> companyUrls = new HashSet<>();
         Map<String, Set<String>> companyEmails = new HashMap<>();
-        int totalPages = 10; // Adjust as needed
+        int totalPages = 840; // Adjust as needed
 
         try {
             // Remove implicit wait
@@ -68,28 +68,34 @@ public class EmailScraperSelenium {
                             .trim();
                     System.out.println("Company name found: " + companyName);
                 } catch (Exception e) {
-                    System.out.println("Company name not found for URL: " + companyUrl);
+                    System.out.println("Company name not found for: " + companyName);
                     continue; // Skip to next company if name not found
                 }
 
-                // Extract email using provided CSS Selector
+                // Extract email if available using targeted XPath
                 Set<String> emails = new HashSet<>();
                 try {
-                    WebElement emailElement = wait.until(ExpectedConditions.visibilityOfElementLocated(
-                            By.cssSelector("li.sc-1mjuqxu-5:nth-child(9) > span:nth-child(2)")));
-                    String emailText = emailElement.getText().trim();
-                    System.out.println("Raw email text for " + companyName + ": " + emailText);
+                    // Locate any text node containing "Sähköposti:" and the following sibling span
+                    List<WebElement> emailElements = driver
+                            .findElements(By.xpath("//*[contains(text(), 'Sähköposti:')]/following-sibling::span"));
+                    for (WebElement emailElement : emailElements) {
+                        String emailText = emailElement.getText().trim();
+                        if (emailText.contains("@")) {
+                            emails.add(emailText);
+                            System.out.println("Email for: " + companyName + " was found: " + emailText);
+                        }
+                    }
 
-                    // Use regex to extract the email address
-                    Pattern emailPattern = Pattern.compile("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-z]{2,}");
-                    Matcher emailMatcher = emailPattern.matcher(emailText);
-
-                    if (emailMatcher.find()) {
-                        String email = emailMatcher.group();
-                        System.out.println("Email found for " + companyName + ": " + email);
-                        emails.add(email);
-                    } else {
-                        System.out.println("No valid email found in the text for " + companyName);
+                    // Backup check using regex within the specific section if no email was found
+                    if (emails.isEmpty()) {
+                        WebElement businessSection = driver.findElement(By.cssSelector("section.sc-1mjuqxu-0"));
+                        String sectionText = businessSection.getText();
+                        Matcher emailMatcher = Pattern.compile("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-z]{2,}")
+                                .matcher(sectionText);
+                        while (emailMatcher.find()) {
+                            emails.add(emailMatcher.group());
+                            System.out.println("Email for: " + companyName + " was found: " + emailMatcher.group());
+                        }
                     }
                 } catch (Exception e) {
                     System.out.println("Email not found for " + companyName + " at URL: " + companyUrl);
